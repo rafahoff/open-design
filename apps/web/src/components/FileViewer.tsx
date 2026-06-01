@@ -771,10 +771,11 @@ interface Props {
   isDeck?: boolean;
   onExportAsPptx?: ((fileName: string) => void) | undefined;
   streaming?: boolean;
+  commentSendDisabled?: boolean;
   previewComments?: PreviewComment[];
   onSavePreviewComment?: (target: PreviewCommentTarget, note: string, attachAfterSave: boolean) => Promise<PreviewComment | null>;
   onRemovePreviewComment?: (commentId: string) => Promise<void>;
-  onSendBoardCommentAttachments?: (attachments: ChatCommentAttachment[]) => Promise<void> | void;
+  onSendBoardCommentAttachments?: (attachments: ChatCommentAttachment[]) => Promise<boolean | void> | boolean | void;
   onFileSaved?: () => Promise<void> | void;
   // Open `openName` as a tab (focusing it) and close `closeName` in one
   // atomic tab-state update. The React module pointer uses this to jump to the
@@ -793,6 +794,7 @@ export function FileViewer({
   isDeck,
   onExportAsPptx,
   streaming,
+  commentSendDisabled = false,
   previewComments = [],
   onSavePreviewComment,
   onRemovePreviewComment,
@@ -833,6 +835,7 @@ export function FileViewer({
         isDeck={rendererMatch.renderer.id === 'deck-html'}
         onExportAsPptx={onExportAsPptx}
         streaming={Boolean(streaming)}
+        commentSendDisabled={commentSendDisabled}
         previewComments={previewComments}
         onSavePreviewComment={onSavePreviewComment}
         onRemovePreviewComment={onRemovePreviewComment}
@@ -4012,6 +4015,7 @@ function HtmlViewer({
   isDeck,
   onExportAsPptx,
   streaming,
+  commentSendDisabled,
   previewComments = [],
   onSavePreviewComment,
   onRemovePreviewComment,
@@ -4028,10 +4032,11 @@ function HtmlViewer({
   isDeck: boolean;
   onExportAsPptx?: ((fileName: string) => void) | undefined;
   streaming: boolean;
+  commentSendDisabled: boolean;
   previewComments?: PreviewComment[];
   onSavePreviewComment?: (target: PreviewCommentTarget, note: string, attachAfterSave: boolean) => Promise<PreviewComment | null>;
   onRemovePreviewComment?: (commentId: string) => Promise<void>;
-  onSendBoardCommentAttachments?: (attachments: ChatCommentAttachment[]) => Promise<void> | void;
+  onSendBoardCommentAttachments?: (attachments: ChatCommentAttachment[]) => Promise<boolean | void> | boolean | void;
   onFileSaved?: () => Promise<void> | void;
   commentPortalId?: string;
   onCommentModeChange?: (active: boolean) => void;
@@ -6339,12 +6344,13 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
     if (nextNotes.length === 0) return;
     setSendingBoardBatch(true);
     try {
-      await onSendBoardCommentAttachments(
+      const accepted = await onSendBoardCommentAttachments(
         buildBoardCommentAttachments({
           target: targetFromSnapshot(activeCommentTarget),
           notes: nextNotes,
         }),
       );
+      if (accepted === false) return;
       clearBoardComposer();
     } finally {
       setSendingBoardBatch(false);
@@ -6749,7 +6755,8 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
         });
         setActivePreviewCommentId((current) => (current === commentId ? null : current));
       } : undefined}
-      sending={sendingBoardBatch || streaming}
+      sending={sendingBoardBatch || commentSendDisabled}
+
       t={t}
       scale={overlayPreviewScale}
       offset={{ x: overlayPreviewTransform.offsetX, y: overlayPreviewTransform.offsetY }}
@@ -6813,14 +6820,14 @@ const [manualEditTargets, setManualEditTargets] = useState<ManualEditTarget[]>([
         fireCommentPopoverClick('send_to_chat');
         setSendingBoardBatch(true);
         try {
-          await onSendBoardCommentAttachments(commentsToAttachments(selected));
-          setSelectedSideCommentIds(new Set());
+          const accepted = await onSendBoardCommentAttachments(commentsToAttachments(selected));
+          if (accepted !== false) setSelectedSideCommentIds(new Set());
         } finally {
           setSendingBoardBatch(false);
         }
       }}
       onCreateComment={savePanelComment}
-      sending={sendingBoardBatch || streaming}
+      sending={sendingBoardBatch || commentSendDisabled}
       t={t}
       composer={null}
     />
